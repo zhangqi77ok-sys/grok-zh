@@ -1,0 +1,6 @@
+dist/
+.release-stage/
+*.zip
+*.tar.gz
+*.sha256
+.DS_Store

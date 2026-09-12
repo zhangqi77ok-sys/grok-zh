@@ -1,0 +1,12 @@
+grok-zh installer
+Copyright 2026 zhangqi77ok-sys
+
+This repository contains an independent installer, uninstaller, and
+release layout for grok-zh. It is not a fork of another GitHub project.
+
+The grok-zh executable distributed in GitHub Releases is a Simplified
+Chinese build of SpaceXAI Grok Build, licensed under Apache License 2.0.
+
+  https://github.com/xai-org/grok-build
+
+This project is not affiliated with SpaceXAI.
