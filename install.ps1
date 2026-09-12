@@ -19,10 +19,14 @@ grok-zh 独立安装器（Windows x64）
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 卸载：
+  $env:GROK_ZH_UNINSTALL='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
+  或运行安装目录中的 uninstall.cmd
 
 选项：
   -Uninstall             卸载本安装器部署的 grok-zh
+  -Version <版本>        安装指定版本，例如 1.0.16
+  -Force                 同版本也重新下载安装
   -WithCompatAliases     额外创建 grok.cmd / agent.cmd（不删官方 grok）
   -NoPathUpdate          不修改用户 PATH
   -InstallDir <路径>     自定义安装目录
@@ -30,6 +34,8 @@ grok-zh 独立安装器（Windows x64）
 
 环境变量：
   GROK_ZH_UNINSTALL=1
+  GROK_ZH_VERSION=1.0.16
+  GROK_ZH_FORCE=1
   GROK_ZH_WITH_COMPAT=1
   GROK_ZH_NO_PATH=1
   GROK_ZH_INSTALL_DIR=<路径>
@@ -90,6 +96,19 @@ function Get-ApiHeaders {
         'User-Agent' = $script:UserAgent
         'Accept'     = 'application/vnd.github+json'
     }
+}
+
+function ConvertTo-ReleaseRef {
+    param([string]$Text)
+    $value = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($value)) { throw '版本号不能为空。' }
+    if ($value -cnotmatch '^v?[0-9]+(\.[0-9]+){1,3}([.-][0-9A-Za-z.]+)?$') {
+        throw "无法识别版本号：$value"
+    }
+    if ($value.StartsWith('v')) {
+        return [pscustomobject]@{ Tag = $value; Version = $value.Substring(1) }
+    }
+    return [pscustomobject]@{ Tag = "v$value"; Version = $value }
 }
 
 function Get-DefaultInstallDir {
@@ -229,17 +248,29 @@ function Invoke-Install {
     param(
         [string]$Dir,
         [bool]$WithCompat,
-        [bool]$NoPath
+        [bool]$NoPath,
+        [bool]$Force,
+        [string]$RequestedVersion
     )
 
     Enable-Tls12
     $headers = Get-ApiHeaders
-    $releaseUri = "https://api.github.com/repos/$script:Repo/releases/latest"
-    Assert-GitHubHttps ([uri]$releaseUri)
-
     Write-Host '正在安装 grok-zh（独立安装器）...'
-    $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
-    if ($release.prerelease -or $release.draft) { throw 'latest 不是正式版。' }
+
+    if ([string]::IsNullOrWhiteSpace($RequestedVersion)) {
+        $releaseUri = "https://api.github.com/repos/$script:Repo/releases/latest"
+    } else {
+        $ref = ConvertTo-ReleaseRef $RequestedVersion
+        $releaseUri = "https://api.github.com/repos/$script:Repo/releases/tags/$($ref.Tag)"
+        Write-Host "指定版本：$($ref.Version)"
+    }
+    Assert-GitHubHttps ([uri]$releaseUri)
+    try {
+        $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers
+    } catch {
+        throw "找不到该版本的 Release。请查看 https://github.com/$script:Repo/releases"
+    }
+    if ($release.prerelease -or $release.draft) { throw '该版本不是正式版。' }
 
     $assets = @($release.assets | Where-Object {
             $_.name -match '^grok-zh-.+-windows-x64\.zip$'
@@ -264,6 +295,25 @@ function Invoke-Install {
 
     $version = [string]$release.tag_name
     if ($version.StartsWith('v')) { $version = $version.Substring(1) }
+    if (-not [string]::IsNullOrWhiteSpace($RequestedVersion)) {
+        $wanted = (ConvertTo-ReleaseRef $RequestedVersion).Version
+        if ($version -cne $wanted) { throw "Release 版本 $version 与请求的 $wanted 不一致。" }
+    }
+
+    $exePath = Join-Path $Dir 'grok-zh.exe'
+    $existing = $null
+    if (Test-Path -LiteralPath $Dir) { $existing = Read-Marker $Dir }
+    if (!$Force -and $existing -and $existing.version -eq $version -and (Test-Path -LiteralPath $exePath)) {
+        Write-Host "已经安装 grok-zh $version，跳过下载。"
+        Write-Host '需要重装请加 -Force，或设置 GROK_ZH_FORCE=1。'
+        if (!$NoPath) { Add-UserPath $Dir }
+        Write-Host "位置：$Dir"
+        Write-Host '运行：  grok-zh'
+        return
+    }
+    if ($existing -and $existing.version -and $existing.version -ne $version) {
+        Write-Host "将从 $($existing.version) 更新到 $version"
+    }
 
     Write-Host "版本：$version"
     Write-Host ("正在下载 {0} （{1:N1} MiB）..." -f $name, ($size / 1MB))
@@ -366,7 +416,10 @@ function Main {
     }
     $withCompat = (Get-Flag @('-WithCompatAliases', '--with-compat-aliases')) -or ($env:GROK_ZH_WITH_COMPAT -eq '1')
     $noPath = (Get-Flag @('-NoPathUpdate', '--no-path-update')) -or ($env:GROK_ZH_NO_PATH -eq '1')
-    Invoke-Install -Dir $dir -WithCompat $withCompat -NoPath $noPath
+    $force = (Get-Flag @('-Force', '--force')) -or ($env:GROK_ZH_FORCE -eq '1')
+    $requested = Get-OptionValue @('-Version', '--version')
+    if ([string]::IsNullOrWhiteSpace($requested)) { $requested = $env:GROK_ZH_VERSION }
+    Invoke-Install -Dir $dir -WithCompat $withCompat -NoPath $noPath -Force $force -RequestedVersion $requested
 }
 
 try {

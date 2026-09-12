@@ -28,15 +28,24 @@ usage() {
     '' \
     '选项：' \
     '  --uninstall             卸载本安装器部署的 grok-zh' \
+    '  --version <版本>        安装指定版本，例如 1.0.16' \
+    '  --force                 同版本也重新下载安装' \
     '  --with-compat-aliases   额外创建 grok / agent 命令' \
     '  --no-path-update        不改 shell 配置' \
     '  --install-dir <目录>    自定义安装目录' \
-    '  -h, --help              显示帮助'
+    '  -h, --help              显示帮助' \
+    '' \
+    '环境变量：' \
+    '  GROK_ZH_UNINSTALL=1' \
+    '  GROK_ZH_VERSION=1.0.16' \
+    '  GROK_ZH_FORCE=1'
 }
 
 WITH_COMPAT=0
 NO_PATH=0
 UNINSTALL=0
+FORCE=0
+REQUESTED_VERSION=${GROK_ZH_VERSION-}
 INSTALL_DIR=${GROK_ZH_INSTALL_DIR:-$DEFAULT_BIN_DIR}
 
 while [ $# -gt 0 ]; do
@@ -44,6 +53,12 @@ while [ $# -gt 0 ]; do
     --with-compat-aliases) WITH_COMPAT=1 ;;
     --no-path-update) NO_PATH=1 ;;
     --uninstall) UNINSTALL=1 ;;
+    --force) FORCE=1 ;;
+    --version)
+      [ $# -ge 2 ] || die '--version 需要版本号，例如 --version 1.0.16'
+      REQUESTED_VERSION=$2
+      shift
+      ;;
     --install-dir)
       [ $# -ge 2 ] || die '--install-dir 需要目录'
       INSTALL_DIR=$2
@@ -58,6 +73,7 @@ done
 [ "${GROK_ZH_WITH_COMPAT-}" = 1 ] && WITH_COMPAT=1
 [ "${GROK_ZH_NO_PATH-}" = 1 ] && NO_PATH=1
 [ "${GROK_ZH_UNINSTALL-}" = 1 ] && UNINSTALL=1
+[ "${GROK_ZH_FORCE-}" = 1 ] && FORCE=1
 
 for required in curl tar uname mktemp mkdir chmod rm mv ln grep tr find head awk tail wc cp; do
   command -v "$required" >/dev/null 2>&1 || die "需要 $required"
@@ -125,21 +141,48 @@ fi
 
 printf '%s\n' '正在安装 grok-zh（独立安装器）...'
 
-location=$(curl -fsSI -A "$USER_AGENT" "https://github.com/${REPO}/releases/latest" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1)
-[ -n "$location" ] || die '无法解析 latest 跳转地址。'
-case "$location" in
-  https://github.com/*) ;;
-  /*) location="https://github.com$location" ;;
-  *) die "latest 跳转不在 github.com：$location" ;;
-esac
-tag=${location##*/}
-case "$tag" in
-  v*) version=${tag#v} ;;
-  *) version=$tag ;;
-esac
+if [ -n "$REQUESTED_VERSION" ]; then
+  case "$REQUESTED_VERSION" in
+    v*) tag=$REQUESTED_VERSION; version=${REQUESTED_VERSION#v} ;;
+    *) tag="v$REQUESTED_VERSION"; version=$REQUESTED_VERSION ;;
+  esac
+  printf '%s\n' "指定版本：$version"
+else
+  location=$(curl -fsSI -A "$USER_AGENT" "https://github.com/${REPO}/releases/latest" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1)
+  [ -n "$location" ] || die '无法解析 latest 跳转地址。'
+  case "$location" in
+    https://github.com/*) ;;
+    /*) location="https://github.com$location" ;;
+    *) die "latest 跳转不在 github.com：$location" ;;
+  esac
+  tag=${location##*/}
+  case "$tag" in
+    v*) version=${tag#v} ;;
+    *) version=$tag ;;
+  esac
+fi
 
 archive="grok-zh-${version}-${PLATFORM}.${ARCHIVE_EXT}"
 url="https://github.com/${REPO}/releases/download/${tag}/${archive}"
+
+installed_version=
+if [ -f "$(marker_path)" ]; then
+  installed_version=$(awk -F= '$1=="version" { print $2; exit }' "$(marker_path)")
+fi
+if [ "$FORCE" -eq 0 ] && [ -n "$installed_version" ] && [ "$installed_version" = "$version" ] && [ -f "$INSTALL_DIR/grok-zh" ]; then
+  printf '%s\n' "已经安装 grok-zh $version，跳过下载。"
+  printf '%s\n' '需要重装请加 --force，或设置 GROK_ZH_FORCE=1。'
+  if [ "$NO_PATH" -eq 0 ]; then
+    add_path_line "$INSTALL_DIR"
+    export PATH="${INSTALL_DIR}:$PATH"
+  fi
+  printf '%s\n' "位置：$INSTALL_DIR"
+  printf '%s\n' '运行：  grok-zh'
+  exit 0
+fi
+if [ -n "$installed_version" ] && [ "$installed_version" != "$version" ]; then
+  printf '%s\n' "将从 $installed_version 更新到 $version"
+fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/grok-zh.XXXXXX") || die '无法创建临时目录。'
 cleanup() {

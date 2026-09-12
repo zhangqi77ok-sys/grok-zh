@@ -38,14 +38,13 @@ grok-zh
 
 ## 卸载
 
+Windows（必须带卸载开关，直接 `irm | iex` 会重新安装）：
+
 ```powershell
-# Windows
-irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
-# 或：
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
+$env:GROK_ZH_UNINSTALL='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
 ```
 
-更简单：运行安装目录里的 `uninstall.cmd`。
+或运行安装目录里的 `uninstall.cmd`。
 
 ```bash
 # macOS / Linux
@@ -58,6 +57,9 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 
 | 作用 | Windows | macOS / Linux |
 | --- | --- | --- |
+| 卸载 | `$env:GROK_ZH_UNINSTALL='1'` | `--uninstall` |
+| 安装指定版本 | `$env:GROK_ZH_VERSION='1.0.16'` | `--version 1.0.16` |
+| 同版本强制重装 | `$env:GROK_ZH_FORCE='1'` | `--force` |
 | 同时创建 `grok` 命令 | `$env:GROK_ZH_WITH_COMPAT='1'` | `--with-compat-aliases` |
 | 不改 PATH | `$env:GROK_ZH_NO_PATH='1'` | `--no-path-update` |
 | 自定义目录 | `$env:GROK_ZH_INSTALL_DIR='D:\apps\grok-zh'` | `--install-dir ~/apps/grok-zh` |
@@ -75,7 +77,17 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 4. 加入 PATH
 5. 留下安装记录，方便以后卸载或更新
 
-再执行一次安装命令就是更新。
+再执行一次安装命令：版本相同会跳过下载；有新版本才会更新。同版本重装请加 `-Force` / `--force`。
+
+指定版本：
+
+```powershell
+$env:GROK_ZH_VERSION='1.0.16'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --version 1.0.16
+```
 
 ## 常见问题
 
