@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Help
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Help
+      - name: Status
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Status
+      - name: Reject missing version
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\install.ps1','-Version','9.9.9') -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -eq 0) { throw 'expected failure for missing version' }
+
+  unix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: sh -n install.sh
+      - name: Help
+        run: sh install.sh --help
+      - name: Status
+        run: sh install.sh --status
+      - name: Reject missing version
+        run: |
+          if sh install.sh --version 9.9.9; then
+            echo 'expected failure for missing version'
+            exit 1
+          fi

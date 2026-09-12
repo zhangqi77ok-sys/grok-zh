@@ -119,6 +119,30 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 **以前装过社区版怎么办？**  
 安装器会检测 `%LOCALAPPDATA%\Programs\grok-zh\bin` 或 `~/.grok/bin`，并更新那一套，不会再装一份。
 
+## 国内网络
+
+访问 GitHub 失败时，可先设代理或镜像再安装：
+
+```powershell
+$env:HTTPS_PROXY='http://127.0.0.1:7890'
+$env:GROK_ZH_MIRROR='https://ghfast.top/'
+irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+```
+
+```bash
+export https_proxy=http://127.0.0.1:7890
+export GROK_ZH_MIRROR=https://ghfast.top/
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+```
+
+`GROK_ZH_MIRROR` 会加在 GitHub 地址前面。请使用你信任的镜像。
+
+## 发版
+
+推送 `v*` 标签会触发 GitHub Actions：创建 Release，并上传 `install.ps1`、`install.sh` 和 `installer-sha256.txt`。
+
+若二进制与上一版相同，可在 Actions 里手动运行 **Release**，填写 `copy_binaries_from`（例如 `v1.0.16`）。新的平台包也可以事后用 `gh release upload` 补上。
+
 ## 许可证
 
 - 本仓库安装脚本：MIT

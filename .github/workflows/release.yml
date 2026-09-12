@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag such as v1.0.16'
+        required: true
+        type: string
+      copy_binaries_from:
+        description: 'Optional existing tag to copy grok-zh platform archives from'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "tag must start with v, got: $TAG" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Hash installers
+        run: |
+          sha256sum install.ps1 install.sh | tee installer-sha256.txt
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          TITLE="${{ steps.meta.outputs.title }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" install.ps1 install.sh installer-sha256.txt --clobber
+          else
+            gh release create "$TAG" install.ps1 install.sh installer-sha256.txt \
+              --title "$TITLE" \
+              --notes "grok-zh ${TITLE}
+
+          安装脚本已附带 SHA-256（installer-sha256.txt）。
+
+          Windows:
+          \`\`\`powershell
+          irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+          \`\`\`
+
+          macOS / Linux:
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+          \`\`\`
+          "
+          fi
+
+      - name: Copy platform archives from previous tag
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.copy_binaries_from != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SRC="${{ inputs.copy_binaries_from }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          mkdir -p dist
+          gh release download "$SRC" --pattern 'grok-zh-*' --dir dist
+          gh release upload "$TAG" dist/grok-zh-* --clobber

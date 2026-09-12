@@ -16,6 +16,31 @@ die() {
   exit 1
 }
 
+die_network() {
+  printf '%s\n' "${PROGRAM_NAME}: $*" >&2
+  printf '%s\n' '若访问 GitHub 困难，可设置代理或镜像后重试：' >&2
+  printf '%s\n' '  export https_proxy=http://127.0.0.1:7890' >&2
+  printf '%s\n' '  export GROK_ZH_MIRROR=https://ghfast.top/' >&2
+  exit 1
+}
+
+apply_mirror() {
+  url=$1
+  mirror=${GROK_ZH_MIRROR-}
+  if [ -z "$mirror" ]; then
+    printf '%s\n' "$url"
+    return 0
+  fi
+  case "$mirror" in
+    */) ;;
+    *) mirror="${mirror}/" ;;
+  esac
+  case "$url" in
+    "$mirror"*) printf '%s\n' "$url" ;;
+    *) printf '%s%s\n' "$mirror" "$url" ;;
+  esac
+}
+
 usage() {
   printf '%s\n' \
     'grok-zh 独立安装器（Linux x86_64 / macOS Apple Silicon）' \
@@ -43,7 +68,9 @@ usage() {
     '  GROK_ZH_STATUS=1' \
     '  GROK_ZH_VERSION=1.0.16' \
     '  GROK_ZH_FORCE=1' \
-    '  GROK_ZH_PORTABLE=1'
+    '  GROK_ZH_PORTABLE=1' \
+    '  GROK_ZH_MIRROR=https://ghfast.top/' \
+    '  https_proxy=http://127.0.0.1:7890'
 }
 
 WITH_COMPAT=0
@@ -159,7 +186,7 @@ resolve_install_dir() {
 
 show_status() {
   latest=
-  location=$(curl -fsSI -A "$USER_AGENT" "https://github.com/${REPO}/releases/latest" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1) || true
+  location=$(curl -fsSI -A "$USER_AGENT" "$(apply_mirror "https://github.com/${REPO}/releases/latest")" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1) || true
   if [ -n "$location" ]; then
     tag=${location##*/}
     case "$tag" in
@@ -221,11 +248,38 @@ marker_path() {
   printf '%s\n' "${INSTALL_DIR}/${MARKER_NAME}"
 }
 
+remove_path_line() {
+  bin_dir=$1
+  if [ "$PORTABLE" -eq 1 ]; then
+    return 0
+  fi
+  for rc_file in "${HOME}/.zshrc" "${HOME}/.bashrc" "${HOME}/.bash_profile" "${HOME}/.profile"; do
+    [ -f "$rc_file" ] || continue
+    grep -F "$bin_dir" "$rc_file" >/dev/null 2>&1 || continue
+    tmp=$(mktemp) || die "无法创建临时文件以更新 $rc_file"
+    awk -v dir="$bin_dir" '
+      /^# grok-zh / { hold=$0; pending=1; next }
+      pending==1 {
+        pending=0
+        if (index($0, dir) && index($0, "export PATH=")) next
+        print hold
+        print
+        next
+      }
+      index($0, "export PATH=") && index($0, dir) { next }
+      { print }
+    ' "$rc_file" > "$tmp" && mv "$tmp" "$rc_file"
+    printf '%s\n' "已从 $rc_file 移除 PATH"
+  done
+}
+
 do_uninstall() {
   [ -d "$INSTALL_DIR" ] || die "未找到安装目录：$INSTALL_DIR"
   [ -f "$(marker_path)" ] || die "目录缺少本安装器记录，拒绝删除：$INSTALL_DIR"
   printf '%s\n' "正在从 $INSTALL_DIR 卸载 grok-zh ..."
-  rm -f "$INSTALL_DIR/grok-zh" "$INSTALL_DIR/agent-zh" "$INSTALL_DIR/grok" "$INSTALL_DIR/agent" "$(marker_path)"
+  remove_path_line "$INSTALL_DIR"
+  rm -f "$INSTALL_DIR/grok-zh" "$INSTALL_DIR/agent-zh" "$INSTALL_DIR/grok" "$INSTALL_DIR/agent" \
+    "$INSTALL_DIR/start-grok-zh.sh" "$INSTALL_DIR/README.txt" "$(marker_path)"
   printf '%s\n' '卸载完成。数据目录 ~/.grok 已保留。'
 }
 
@@ -276,14 +330,13 @@ if [ -n "$REQUESTED_VERSION" ]; then
   esac
   printf '%s\n' "指定版本：$version"
 else
-  location=$(curl -fsSI -A "$USER_AGENT" "https://github.com/${REPO}/releases/latest" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1)
-  [ -n "$location" ] || die '无法解析 latest 跳转地址。'
-  case "$location" in
-    https://github.com/*) ;;
-    /*) location="https://github.com$location" ;;
-    *) die "latest 跳转不在 github.com：$location" ;;
-  esac
+  location=$(curl -fsSI -A "$USER_AGENT" "$(apply_mirror "https://github.com/${REPO}/releases/latest")" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1) || true
+  [ -n "$location" ] || die_network '无法解析 latest 跳转地址。'
   tag=${location##*/}
+  case "$tag" in
+    v[0-9]*|[0-9]*) ;;
+    *) die_network "无法识别发布标签：$tag" ;;
+  esac
   case "$tag" in
     v*) version=${tag#v} ;;
     *) version=$tag ;;
@@ -320,14 +373,14 @@ trap cleanup EXIT INT TERM HUP
 printf '%s\n' "版本：$version"
 printf '%s\n' "平台：$PLATFORM"
 printf '%s\n' "正在下载 $archive ..."
-curl -fL --retry 3 -A "$USER_AGENT" -o "$work/$archive" "$url"
-
+curl -fL --retry 3 -A "$USER_AGENT" -o "$work/$archive" "$(apply_mirror "$url")" || \
+  die_network '下载安装包失败。'
 archive_size=$(wc -c < "$work/$archive" | tr -d ' ')
 [ "$archive_size" -gt 0 ] || die '下载的安装包为空。'
 [ "$archive_size" -le "$MAX_BYTES" ] || die '安装包超过大小限制。'
 
-curl -fL --retry 3 -A "$USER_AGENT" -o "$work/$archive.sha256" "${url}.sha256" || \
-  die '无法下载 SHA-256，已中止。请重试安装。'
+curl -fL --retry 3 -A "$USER_AGENT" -o "$work/$archive.sha256" "$(apply_mirror "${url}.sha256")" || \
+  die_network '无法下载 SHA-256，已中止。请重试安装。'
 expected=$(awk '{ print $1; exit }' "$work/$archive.sha256")
 printf '%s\n' "$expected" | grep -Eq '^[0-9a-fA-F]{64}$' || die 'SHA-256 清单格式无效，已中止。'
 actual=$($SHA_CMD "$work/$archive" | awk '{ print $1 }')

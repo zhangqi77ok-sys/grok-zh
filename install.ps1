@@ -45,6 +45,8 @@ grok-zh 独立安装器（Windows x64）
   GROK_ZH_WITH_COMPAT=1
   GROK_ZH_NO_PATH=1
   GROK_ZH_INSTALL_DIR=<路径>
+  HTTPS_PROXY=http://127.0.0.1:7890
+  GROK_ZH_MIRROR=https://ghfast.top/
 '@ | Write-Host
 }
 
@@ -104,6 +106,23 @@ function Get-ApiHeaders {
     }
 }
 
+function Get-MirroredUri {
+    param([string]$Url)
+    $mirror = $env:GROK_ZH_MIRROR
+    if ([string]::IsNullOrWhiteSpace($mirror)) { return $Url }
+    $prefix = $mirror.Trim()
+    if (-not $prefix.EndsWith('/')) { $prefix += '/' }
+    if ($Url.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $Url }
+    return $prefix + $Url
+}
+
+function Show-NetworkHint {
+    Write-Host ''
+    Write-Host '若访问 GitHub 困难，可设置代理或镜像后重试：' -ForegroundColor Yellow
+    Write-Host "  `$env:HTTPS_PROXY='http://127.0.0.1:7890'"
+    Write-Host "  `$env:GROK_ZH_MIRROR='https://ghfast.top/'"
+}
+
 function Test-PortableMode {
     if (Get-Flag @('-Portable', '--portable')) { return $true }
     if ($env:GROK_ZH_PORTABLE -eq '1') { return $true }
@@ -116,13 +135,17 @@ function Test-PortableMode {
 function Invoke-GitHubRest {
     param([uri]$Uri)
     Assert-GitHubHttps $Uri
+    $fetch = Get-MirroredUri $Uri.AbsoluteUri
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
-            return Invoke-RestMethod -Uri $Uri -Headers (Get-ApiHeaders)
+            return Invoke-RestMethod -Uri $fetch -Headers (Get-ApiHeaders)
         } catch {
             $message = $_.Exception.Message
             if ($message -match '404|Not Found') { throw }
-            if ($attempt -eq 3) { throw }
+            if ($attempt -eq 3) {
+                Show-NetworkHint
+                throw
+            }
             Write-Host "网络暂时不可用，正在重试（$attempt/3）..." -ForegroundColor Yellow
             Start-Sleep -Seconds $attempt
         }
@@ -132,18 +155,22 @@ function Invoke-GitHubRest {
 function Invoke-GitHubDownload {
     param([uri]$Uri, [string]$OutFile, [long]$ExpectedBytes = -1)
     Assert-GitHubHttps $Uri
+    $fetch = Get-MirroredUri $Uri.AbsoluteUri
     $headers = @{ 'User-Agent' = $script:UserAgent }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         try {
             if (Test-Path -LiteralPath $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
-            Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $OutFile -Headers $headers
+            Invoke-WebRequest -UseBasicParsing -Uri $fetch -OutFile $OutFile -Headers $headers
             $size = (Get-Item -LiteralPath $OutFile).Length
             if ($ExpectedBytes -ge 0 -and $size -ne $ExpectedBytes) {
                 throw "下载大小与发布信息不一致（$size / $ExpectedBytes）。"
             }
             return
         } catch {
-            if ($attempt -eq 3) { throw "下载失败：$($_.Exception.GetBaseException().Message)" }
+            if ($attempt -eq 3) {
+                Show-NetworkHint
+                throw "下载失败：$($_.Exception.GetBaseException().Message)"
+            }
             Write-Host "下载失败，正在重试（$attempt/3）..." -ForegroundColor Yellow
             Start-Sleep -Seconds (2 * $attempt)
         }
@@ -335,10 +362,10 @@ function Get-RequiredSha256 {
         return $matches[1].ToLowerInvariant()
     }
     $shaUrl = "$Url.sha256"
-    Assert-GitHubHttps ([uri]$shaUrl)
     try {
-        $shaText = [string](Invoke-RestMethod -Uri $shaUrl -Headers (Get-ApiHeaders))
+        $shaText = [string](Invoke-GitHubRest -Uri $shaUrl)
     } catch {
+        Show-NetworkHint
         throw '安装包缺少 SHA-256，已中止。请重试安装。'
     }
     if ($shaText -notmatch '([0-9a-fA-F]{64})') {
