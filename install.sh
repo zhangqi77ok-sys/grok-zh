@@ -17,8 +17,8 @@ die() {
 usage() {
   printf '%s\n' \
     '用法：' \
-    '  curl -fsSL https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.sh | sh' \
-    '  curl -fsSL https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.sh | sh -s -- [选项]' \
+    '  curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh' \
+    '  curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- [选项]' \
     '  sh install.sh [选项]' \
     '' \
     '从 GitHub 正式 Release 安装 Grok Build 中文社区版（grok-zh）。' \

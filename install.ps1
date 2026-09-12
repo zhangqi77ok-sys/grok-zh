@@ -12,7 +12,7 @@ $script:MaxBytes = 536870912L
 function Show-GrokZhInstallHelp {
     @'
 用法：
-  irm https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.ps1 | iex
+  irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 [选项]
 
 从 GitHub 正式 Release 安装 Grok Build 中文社区版（grok-zh）。

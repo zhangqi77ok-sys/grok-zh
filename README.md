@@ -1,62 +1,83 @@
-# grok-zh 一键安装
+# Grok CLI 中文版 · grok-zh
 
-把 [Grok Build](https://github.com/xai-org/grok-build) 装成中文版。复制一条命令即可，不用再翻文档、找 Release、对校验。
+**Grok CLI Chinese / Grok Build 简体中文汉化一键安装。**
 
-本仓库只提供安装入口。真正的中文程序来自社区版：
+把 xAI [Grok Build](https://github.com/xai-org/grok-build)（官方命令 `grok`）装成中文界面。复制一条命令即可，不用翻文档、不用找 Release。
 
-**https://github.com/JoyElliot/grok-build-Chinese**
+- 命令：`grok-zh`（Grok CLI 中文版）
+- 语言：简体中文 `zh-CN`
+- 平台：Windows x64、Linux x86_64、macOS Apple Silicon
+- 与官方 `grok` 共存，登录和会话共用 `~/.grok`
 
-这不是 SpaceXAI 官方发行版。
+这不是 SpaceXAI 官方发行版。程序本体来自社区仓库 [JoyElliot/grok-build-Chinese](https://github.com/JoyElliot/grok-build-Chinese)。
+
+[Install](#一条命令安装-grok-cli-中文版) · [English](#grok-cli-chinese-unofficial) · [FAQ](#常见问题) · [Uninstall](#卸载)
 
 ---
 
-## 一条命令安装
+## 一条命令安装 Grok CLI 中文版
 
 ### Windows（PowerShell）
 
 ```powershell
-irm https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
 ```
 
-也可双击仓库里的 `install.cmd`，或：
+也可双击仓库里的 `install.cmd`。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-### macOS Apple Silicon / Linux x86_64
+### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
 ```
 
-装好后重新打开终端，运行：
+装好后重新打开终端：
 
 ```bash
 grok-zh
 ```
 
+搜这些词都能找到本项目：**Grok 中文**、**Grok CLI 汉化**、**Grok Build 中文版**、**grok-zh**、**Grok CLI Chinese**。
+
+---
+
+## Grok CLI Chinese (unofficial)
+
+One-command installer for the unofficial Simplified Chinese community build of [xAI Grok Build](https://github.com/xai-org/grok-build).
+
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+```
+
+```bash
+# macOS Apple Silicon / Linux x86_64
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+```
+
+Then run `grok-zh`. Default UI locale is `zh-CN`. Official `grok` is left in place. Login, sessions, config and plugins stay in `~/.grok`.
+
+Keywords: Grok CLI, Grok Build, grok-zh, Chinese localization, 简体中文, 汉化, xAI, SpaceXAI.
+
 ---
 
 ## grok-zh 是什么
 
-`grok-zh` 是官方 Grok Build（命令 `grok`）的非官方简体中文社区版。
+`grok-zh` 是官方 Grok Build 的非官方简体中文社区版，用来解决英文 TUI 难看懂的问题。
 
-它做了这些事：
+- CLI、终端界面、设置、提示、用户文档默认中文
+- 程序名独立为 `grok-zh` / `agent-zh`，默认不覆盖官方 `grok`
+- 共用 `~/.grok`：登录、会话、配置、插件、第三方 API 两边一致
+- 中文对话里的会话标题和计划优先生成中文
+- 内置更新只读社区仓库的 GitHub Immutable Release
 
-- CLI、TUI、设置、提示信息、用户文档默认使用简体中文
-- 程序名独立为 `grok-zh` / `agent-zh`，默认与官方 `grok` 共存
-- 有意共用 `~/.grok`：登录状态、会话、配置、插件、第三方 API 两边一致
-- 中文对话里的会话标题和计划优先生成中文（命令名、路径、工具名、配置键保持原样）
-- 内置更新器只读取本社区仓库的 GitHub Immutable Release，不走官方 npm / x.ai 更新源
-
-当前稳定版与上游对齐为 **1.0.16**。已发布平台：
+当前稳定版对齐上游 **1.0.16**。
 
 | 系统 | 架构 | 安装后命令 |
 | --- | --- | --- |
 | Windows | x64 | `grok-zh` |
 | Linux | x86_64 | `grok-zh` |
-| macOS | Apple Silicon | `grok-zh` |
+| macOS | Apple Silicon (M 系列) | `grok-zh` |
 
 默认安装位置：
 
@@ -68,46 +89,38 @@ grok-zh
 ## 安装脚本会做什么
 
 1. 识别当前系统
-2. 从 `JoyElliot/grok-build-Chinese` 的**最新正式 Release** 下载对应安装包
-3. 用 GitHub 发布的 SHA-256 校验文件
-4. 调用安装包自带的官方安装器完成部署
-5. 把 `grok-zh` 加入 PATH（可用选项关闭）
+2. 从 `JoyElliot/grok-build-Chinese` 最新正式 Release 下载安装包
+3. SHA-256 校验
+4. 调用包内安装器
+5. 把 `grok-zh` 加入 PATH（可关闭）
 
-不会：
-
-- 默认卸载官方 `grok`
-- 默认接管 `grok` 命令名
-- 删除 `~/.grok` 里的聊天记录、登录状态或配置
+不会默认卸载官方 `grok`，也不会删除 `~/.grok` 数据。
 
 ---
 
 ## 常用选项
 
-### 同时创建 `grok` / `agent` 兼容命令
-
-官方版仍保留，只是多个同名入口指向中文版：
+同时创建 `grok` / `agent` 兼容命令（官方版仍保留）：
 
 ```powershell
-# Windows（irm | iex 用环境变量）
-$env:GROK_ZH_WITH_COMPAT='1'; irm https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.ps1 | iex
+$env:GROK_ZH_WITH_COMPAT='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
 ```
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.sh | sh -s -- --with-compat-aliases
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --with-compat-aliases
 ```
 
-### 不改 PATH
+不改 PATH：
 
 ```powershell
-$env:GROK_ZH_NO_PATH='1'; irm https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.ps1 | iex
+$env:GROK_ZH_NO_PATH='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JoyElliot/grok-zh-install/main/install.sh | sh -s -- --no-path-update
+curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --no-path-update
 ```
 
-### 本地已克隆本仓库时
+本地已克隆时：
 
 ```powershell
 .\install.cmd
@@ -128,53 +141,52 @@ cd /path/to/your/project
 grok-zh
 ```
 
-- 未登录时按提示用浏览器登录（与官方相同，数据在 `~/.grok`）
-- 界面语言默认 `zh-CN`，可用 `grok-zh --locale en-US` 切回英文
-- 更新：再执行一次上面的安装命令，或在程序内使用内置更新
+- 未登录时按提示用浏览器登录（数据在 `~/.grok`）
+- 默认 `zh-CN`，切回英文：`grok-zh --locale en-US`
+- 更新：再跑一次安装命令，或在程序内更新
 
-更完整的功能说明见社区版仓库：
-
-https://github.com/JoyElliot/grok-build-Chinese
+完整功能说明：[JoyElliot/grok-build-Chinese](https://github.com/JoyElliot/grok-build-Chinese)
 
 ---
 
-## 上传到你自己的 GitHub 仓库
+## 常见问题
 
-1. 在 GitHub 新建空仓库，例如 `grok-zh-install`（建议 Public）
-2. 若仓库名或用户名不是 `JoyElliot/grok-zh-install`，把 `README.md`、`install.ps1`、`install.sh` 里的这一段换成你的地址：
+**和官方 grok 冲突吗？**  
+默认不冲突。官方继续用 `grok`，中文版用 `grok-zh`。
 
-   `JoyElliot/grok-zh-install`
+**登录要重新做吗？**  
+不用。两边共用 `~/.grok`。
 
-3. 推送：
+**Intel Mac 能装吗？**  
+目前社区包只提供 Apple Silicon。
 
-```bash
-cd grok-zh-install
-git init
-git add .
-git commit -m "Add grok-zh one-command installer"
-git branch -M main
-git remote add origin https://github.com/<你的用户名>/grok-zh-install.git
-git push -u origin main
-```
+**Windows 弹出 SmartScreen？**  
+社区包没有 Authenticode 签名。请只从本仓库或 `JoyElliot/grok-build-Chinese` 安装。
 
-4. 把 README 里的两条安装命令发给别人即可。
+**这是官方中文版吗？**  
+不是。这是社区汉化，不代表 SpaceXAI。
 
-脚本下载的程序始终来自 `JoyElliot/grok-build-Chinese` 的正式 Release，不依赖你的仓库里有没有二进制。
+---
+
+## 卸载
+
+- Windows：删除 `%LOCALAPPDATA%\Programs\grok-zh`，并从用户 PATH 去掉该目录
+- macOS / Linux：删除 `~/.grok/bin/grok-zh` 与 `~/.grok/bin/agent-zh`
+- 聊天记录在 `~/.grok`，卸载程序不会自动删除
 
 ---
 
 ## 安全说明
 
-- Windows 包尚未 Authenticode 签名，首次运行可能出现 SmartScreen，请只从上述 GitHub 仓库安装
-- macOS 包尚未 Apple 公证，可能被 Gatekeeper 拦截；安装脚本会尝试去掉下载隔离属性
-- 安装脚本只从 `github.com` 下载，并在解压前校验 SHA-256
-- 模型、登录、订阅等在线能力仍走官方服务，社区版无法保证
+- 只从 `github.com` 下载，解压前校验 SHA-256
+- Windows 未签名，macOS 未公证
+- 模型、登录、订阅仍走官方服务
 
-遇到汉化或安装问题：https://github.com/JoyElliot/grok-build-Chinese/issues
+问题反馈：https://github.com/JoyElliot/grok-build-Chinese/issues
 
 ---
 
 ## 许可证
 
 - 本仓库安装脚本：MIT
-- `grok-zh` 程序：Apache-2.0（上游 SpaceXAI Grok Build 及其社区 Fork）
+- `grok-zh` 程序：Apache-2.0（上游 SpaceXAI Grok Build 及社区 Fork）
