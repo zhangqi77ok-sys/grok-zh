@@ -28,8 +28,11 @@ usage() {
     '' \
     '选项：' \
     '  --uninstall             卸载本安装器部署的 grok-zh' \
+    '  --status                查看已装版本、最新版本和安装目录' \
     '  --version <版本>        安装指定版本，例如 1.0.16' \
     '  --force                 同版本也重新下载安装' \
+    '  --portable              便携安装，不改 PATH' \
+    '  --portable-dir <目录>   便携目录（默认当前目录下的 grok-zh）' \
     '  --with-compat-aliases   额外创建 grok / agent 命令' \
     '  --no-path-update        不改 shell 配置' \
     '  --install-dir <目录>    自定义安装目录' \
@@ -37,14 +40,18 @@ usage() {
     '' \
     '环境变量：' \
     '  GROK_ZH_UNINSTALL=1' \
+    '  GROK_ZH_STATUS=1' \
     '  GROK_ZH_VERSION=1.0.16' \
-    '  GROK_ZH_FORCE=1'
+    '  GROK_ZH_FORCE=1' \
+    '  GROK_ZH_PORTABLE=1'
 }
 
 WITH_COMPAT=0
 NO_PATH=0
 UNINSTALL=0
 FORCE=0
+STATUS=0
+PORTABLE=0
 REQUESTED_VERSION=${GROK_ZH_VERSION-}
 INSTALL_DIR=
 INSTALL_DIR_EXPLICIT=0
@@ -54,6 +61,19 @@ while [ $# -gt 0 ]; do
     --with-compat-aliases) WITH_COMPAT=1 ;;
     --no-path-update) NO_PATH=1 ;;
     --uninstall) UNINSTALL=1 ;;
+    --status) STATUS=1 ;;
+    --portable)
+      PORTABLE=1
+      NO_PATH=1
+      ;;
+    --portable-dir)
+      [ $# -ge 2 ] || die '--portable-dir 需要目录'
+      INSTALL_DIR=$2
+      INSTALL_DIR_EXPLICIT=1
+      PORTABLE=1
+      NO_PATH=1
+      shift
+      ;;
     --force) FORCE=1 ;;
     --version)
       [ $# -ge 2 ] || die '--version 需要版本号，例如 --version 1.0.16'
@@ -72,19 +92,29 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+[ "${GROK_ZH_WITH_COMPAT-}" = 1 ] && WITH_COMPAT=1
+[ "${GROK_ZH_NO_PATH-}" = 1 ] && NO_PATH=1
+[ "${GROK_ZH_UNINSTALL-}" = 1 ] && UNINSTALL=1
+[ "${GROK_ZH_FORCE-}" = 1 ] && FORCE=1
+[ "${GROK_ZH_STATUS-}" = 1 ] && STATUS=1
+[ "${GROK_ZH_PORTABLE-}" = 1 ] && PORTABLE=1 && NO_PATH=1
+
+if [ "$PORTABLE" -eq 1 ] && [ -z "$INSTALL_DIR" ] && [ -n "${GROK_ZH_PORTABLE_DIR-}" ]; then
+  INSTALL_DIR=$GROK_ZH_PORTABLE_DIR
+  INSTALL_DIR_EXPLICIT=1
+fi
+
 if [ -z "$INSTALL_DIR" ]; then
-  if [ -n "${GROK_ZH_INSTALL_DIR-}" ]; then
+  if [ "$PORTABLE" -eq 1 ]; then
+    INSTALL_DIR="${PWD}/grok-zh"
+    INSTALL_DIR_EXPLICIT=1
+  elif [ -n "${GROK_ZH_INSTALL_DIR-}" ]; then
     INSTALL_DIR=$GROK_ZH_INSTALL_DIR
     INSTALL_DIR_EXPLICIT=1
   else
     INSTALL_DIR=$DEFAULT_BIN_DIR
   fi
 fi
-
-[ "${GROK_ZH_WITH_COMPAT-}" = 1 ] && WITH_COMPAT=1
-[ "${GROK_ZH_NO_PATH-}" = 1 ] && NO_PATH=1
-[ "${GROK_ZH_UNINSTALL-}" = 1 ] && UNINSTALL=1
-[ "${GROK_ZH_FORCE-}" = 1 ] && FORCE=1
 
 for required in curl tar uname mktemp mkdir chmod rm mv ln grep tr find head awk tail wc cp; do
   command -v "$required" >/dev/null 2>&1 || die "需要 $required"
@@ -108,25 +138,74 @@ case "$os:$arch" in
 esac
 
 resolve_install_dir() {
+  if [ "$PORTABLE" -eq 1 ]; then
+    return 0
+  fi
   if [ -f "$INSTALL_DIR/grok-zh" ] || [ -f "$(marker_path)" ]; then
     return 0
   fi
   if [ -f "$INSTALL_DIR/bin/grok-zh" ]; then
-    printf '%s\n' "检测到旧版安装：$INSTALL_DIR/bin"
-    printf '%s\n' '将安装到该目录，避免出现两套 grok-zh。'
+    printf '%s\n' "发现旧版安装：$INSTALL_DIR/bin"
+    printf '%s\n' '将使用该目录，避免出现两套 grok-zh。'
     INSTALL_DIR="$INSTALL_DIR/bin"
     return 0
   fi
   if [ "$INSTALL_DIR_EXPLICIT" -eq 0 ] && [ -f "${HOME}/.grok/bin/grok-zh" ]; then
-    printf '%s\n' "检测到旧版安装：${HOME}/.grok/bin"
-    printf '%s\n' '将安装到该目录，避免出现两套 grok-zh。'
+    printf '%s\n' "发现旧版安装：${HOME}/.grok/bin"
+    printf '%s\n' '将使用该目录，避免出现两套 grok-zh。'
     INSTALL_DIR="${HOME}/.grok/bin"
+  fi
+}
+
+show_status() {
+  latest=
+  location=$(curl -fsSI -A "$USER_AGENT" "https://github.com/${REPO}/releases/latest" | tr -d '\r' | awk 'tolower($1)=="location:" { print $2 }' | tail -n 1) || true
+  if [ -n "$location" ]; then
+    tag=${location##*/}
+    case "$tag" in
+      v*) latest=${tag#v} ;;
+      *) latest=$tag ;;
+    esac
+  fi
+  installed=
+  managed=0
+  if [ -f "$(marker_path)" ]; then
+    installed=$(awk -F= '$1=="version" { print $2; exit }' "$(marker_path)")
+    managed=1
+  elif [ -f "$INSTALL_DIR/grok-zh" ]; then
+    installed=$("$INSTALL_DIR/grok-zh" --version 2>/dev/null | awk '{ print $2; exit }')
+  fi
+  printf '%s\n' 'grok-zh 状态'
+  if [ -d "$INSTALL_DIR" ]; then
+    printf '%s\n' "安装目录：$INSTALL_DIR"
+  else
+    printf '%s\n' '安装目录：尚未安装'
+  fi
+  if [ -n "$installed" ]; then
+    printf '%s\n' "已装版本：$installed"
+  else
+    printf '%s\n' '已装版本：未安装'
+  fi
+  if [ -n "$latest" ]; then
+    printf '%s\n' "最新正式版：$latest"
+  else
+    printf '%s\n' '最新正式版：未知'
+  fi
+  if [ -n "$installed" ] && [ -n "$latest" ] && [ "$installed" = "$latest" ]; then
+    printf '%s\n' '结论：已是最新正式版。'
+  elif [ -n "$installed" ] && [ -n "$latest" ]; then
+    printf '%s\n' "结论：可以更新（$installed → $latest）。再次运行安装命令即可。"
+  elif [ -z "$installed" ]; then
+    printf '%s\n' '结论：尚未安装。运行安装命令即可。'
   fi
 }
 
 show_ready() {
   printf '%s\n' "位置：$INSTALL_DIR"
-  if [ "$NO_PATH" -eq 1 ]; then
+  if [ "$PORTABLE" -eq 1 ]; then
+    printf '%s\n' "便携版未修改 PATH。运行：$INSTALL_DIR/grok-zh"
+    printf '%s\n' '整个文件夹可以拷走使用。'
+  elif [ "$NO_PATH" -eq 1 ]; then
     printf '%s\n' "未修改 PATH。直接运行：$INSTALL_DIR/grok-zh"
   else
     printf '%s\n' '当前窗口可运行：  grok-zh --version'
@@ -177,6 +256,11 @@ add_path_line() {
 }
 
 resolve_install_dir
+
+if [ "$STATUS" -eq 1 ]; then
+  show_status
+  exit 0
+fi
 
 if [ "$UNINSTALL" -eq 1 ]; then
   do_uninstall
@@ -281,7 +365,14 @@ if [ "$WITH_COMPAT" -eq 1 ]; then
   ln -sf grok-zh "$INSTALL_DIR/grok"
   ln -sf agent-zh "$INSTALL_DIR/agent"
 fi
-printf '%s\n' "product=grok-zh" "version=${version}" "dir=${INSTALL_DIR}" > "$(marker_path)"
+if [ "$PORTABLE" -eq 1 ]; then
+  printf '%s\n' '#!/bin/sh' 'cd "$(dirname "$0")"' 'exec ./grok-zh "$@"' > "$INSTALL_DIR/start-grok-zh.sh"
+  chmod 755 "$INSTALL_DIR/start-grok-zh.sh"
+  printf '%s\n' 'grok-zh 便携版' "运行： $INSTALL_DIR/grok-zh" '整个文件夹可以拷走使用。不会修改 PATH。' > "$INSTALL_DIR/README.txt"
+  printf '%s\n' "product=grok-zh" "version=${version}" "dir=${INSTALL_DIR}" "portable=1" > "$(marker_path)"
+else
+  printf '%s\n' "product=grok-zh" "version=${version}" "dir=${INSTALL_DIR}" "portable=0" > "$(marker_path)"
+fi
 
 if [ "$NO_PATH" -eq 0 ]; then
   add_path_line "$INSTALL_DIR"
