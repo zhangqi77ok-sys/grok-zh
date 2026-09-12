@@ -118,6 +118,40 @@ function Get-DefaultInstallDir {
     return [IO.Path]::GetFullPath($fromEnv)
 }
 
+function Resolve-InstallDir {
+    $dir = Get-DefaultInstallDir
+    $ownExe = Join-Path $dir 'grok-zh.exe'
+    if ((Test-Path -LiteralPath $ownExe) -or (Read-Marker $dir)) { return $dir }
+    $legacyBin = Join-Path $dir 'bin'
+    $legacyExe = Join-Path $legacyBin 'grok-zh.exe'
+    if (Test-Path -LiteralPath $legacyExe) {
+        Write-Host "检测到旧版安装：$legacyBin"
+        Write-Host '将安装到该目录，避免出现两套 grok-zh。'
+        return $legacyBin
+    }
+    return $dir
+}
+
+function Enter-SessionPath {
+    param([string]$Dir)
+    $env:Path = ($Dir.TrimEnd('\', '/')) + ';' + $env:Path
+}
+
+function Show-InstallReady {
+    param([string]$Dir, [bool]$NoPath, [bool]$WithCompat)
+    Write-Host "位置：$Dir"
+    if ($NoPath) {
+        Write-Host "未修改 PATH。直接运行："
+        Write-Host ('  "' + (Join-Path $Dir 'grok-zh.exe') + '"')
+    } else {
+        Write-Host '当前窗口可运行：  grok-zh --version'
+        Write-Host '若提示找不到命令，请新开一个终端。'
+    }
+    if ($WithCompat) { Write-Host '兼容入口已启用：  grok' }
+    Write-Host '若 Windows 弹出 SmartScreen，选择「仍要运行」。'
+    Write-Host "仓库：https://github.com/$script:Repo"
+}
+
 function Get-MarkerPath {
     param([string]$Dir)
     return Join-Path $Dir $script:MarkerName
@@ -227,6 +261,104 @@ function Find-PackageFile {
         Select-Object -First 1
 }
 
+function Get-RequiredSha256 {
+    param([string]$Digest, [string]$Url)
+    if ($Digest -match '^sha256:([0-9a-fA-F]{64})$') {
+        return $matches[1].ToLowerInvariant()
+    }
+    $shaUrl = "$Url.sha256"
+    Assert-GitHubHttps ([uri]$shaUrl)
+    try {
+        $shaText = [string](Invoke-RestMethod -Uri $shaUrl -Headers (Get-ApiHeaders))
+    } catch {
+        throw '安装包缺少 SHA-256，已中止。请重试安装。'
+    }
+    if ($shaText -notmatch '([0-9a-fA-F]{64})') {
+        throw 'SHA-256 清单格式无效，已中止。'
+    }
+    return $matches[1].ToLowerInvariant()
+}
+
+function Write-InstallPayload {
+    param(
+        [string]$Dest,
+        $ExeItem,
+        $RgItem,
+        [string]$Version,
+        [bool]$WithCompat
+    )
+    if (Test-Path -LiteralPath $Dest) {
+        Remove-Item -LiteralPath $Dest -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $Dest | Out-Null
+    Copy-Item -LiteralPath $ExeItem.FullName -Destination (Join-Path $Dest 'grok-zh.exe') -Force
+    if ($RgItem) {
+        Copy-Item -LiteralPath $RgItem.FullName -Destination (Join-Path $Dest 'rg.exe') -Force
+    }
+    Write-CmdShim (Join-Path $Dest 'agent-zh.cmd') 'grok-zh.exe' 'agent'
+    $localUninstallPs1 = @"
+`$ErrorActionPreference = 'Stop'
+`$dir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$marker = Join-Path `$dir 'install-record.json'
+if (!(Test-Path -LiteralPath `$marker)) { throw "缺少安装记录，拒绝卸载：`$dir" }
+`$current = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (`$current) {
+    `$keep = @(`$current.Split(';') | Where-Object { `$_ -and (`$_.TrimEnd('\','/') -ne `$dir.TrimEnd('\','/')) })
+    [Environment]::SetEnvironmentVariable('Path', (`$keep -join ';'), 'User')
+}
+Remove-Item -LiteralPath `$dir -Recurse -Force
+Write-Host '已卸载 grok-zh。数据目录 %USERPROFILE%\.grok 已保留。'
+"@
+    [IO.File]::WriteAllText((Join-Path $Dest 'uninstall.ps1'), $localUninstallPs1, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText(
+        (Join-Path $Dest 'uninstall.cmd'),
+        "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0uninstall.ps1`"`r`n",
+        [Text.UTF8Encoding]::new($false)
+    )
+    $commands = @('grok-zh', 'agent-zh')
+    if ($WithCompat) {
+        Write-CmdShim (Join-Path $Dest 'grok.cmd') 'grok-zh.exe'
+        Write-CmdShim (Join-Path $Dest 'agent.cmd') 'grok-zh.exe' 'agent'
+        $commands += @('grok', 'agent')
+    }
+    Save-Marker -Dir $Dest -Version $Version -Commands $commands
+}
+
+function Switch-AtomicInstall {
+    param([string]$Payload, [string]$Dir)
+    $parent = Split-Path -Parent $Dir
+    if ($parent -and !(Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent | Out-Null
+    }
+    $backup = $null
+    $movedOld = $false
+    try {
+        if (Test-Path -LiteralPath $Dir) {
+            $items = @(Get-ChildItem -LiteralPath $Dir -Force)
+            if ($items.Count -eq 0) {
+                Remove-Item -LiteralPath $Dir -Force
+            } else {
+                $existing = Read-Marker $Dir
+                if (!$existing) {
+                    throw "目标目录已存在且不是本安装器部署的：$Dir"
+                }
+                $backup = Join-Path $parent ('.grok-zh-backup-' + [guid]::NewGuid().ToString('N'))
+                Rename-Item -LiteralPath $Dir -NewName (Split-Path -Leaf $backup)
+                $movedOld = $true
+            }
+        }
+        Move-Item -LiteralPath $Payload -Destination $Dir
+        if ($movedOld -and $backup -and (Test-Path -LiteralPath $backup)) {
+            Remove-Item -LiteralPath $backup -Recurse -Force
+        }
+    } catch {
+        if ($movedOld -and $backup -and (Test-Path -LiteralPath $backup) -and !(Test-Path -LiteralPath $Dir)) {
+            Rename-Item -LiteralPath $backup -NewName (Split-Path -Leaf $Dir)
+        }
+        throw
+    }
+}
+
 function Invoke-Uninstall {
     param([string]$Dir)
     if (!(Test-Path -LiteralPath $Dir)) {
@@ -286,10 +418,7 @@ function Invoke-Install {
         throw "下载地址不属于 $script:Repo"
     }
 
-    $expected = $null
-    if ([string]$asset.digest -match '^sha256:([0-9a-fA-F]{64})$') {
-        $expected = $matches[1].ToLowerInvariant()
-    }
+    $expected = Get-RequiredSha256 -Digest ([string]$asset.digest) -Url $url
     $size = [long]$asset.size
     if ($size -le 0 -or $size -gt $script:MaxBytes) { throw "安装包大小无效：$size" }
 
@@ -306,9 +435,11 @@ function Invoke-Install {
     if (!$Force -and $existing -and $existing.version -eq $version -and (Test-Path -LiteralPath $exePath)) {
         Write-Host "已经安装 grok-zh $version，跳过下载。"
         Write-Host '需要重装请加 -Force，或设置 GROK_ZH_FORCE=1。'
-        if (!$NoPath) { Add-UserPath $Dir }
-        Write-Host "位置：$Dir"
-        Write-Host '运行：  grok-zh'
+        if (!$NoPath) {
+            Add-UserPath $Dir
+            Enter-SessionPath $Dir
+        }
+        Show-InstallReady -Dir $Dir -NoPath $NoPath -WithCompat $WithCompat
         return
     }
     if ($existing -and $existing.version -and $existing.version -ne $version) {
@@ -324,11 +455,9 @@ function Invoke-Install {
         $zipPath = Join-Path $work $name
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zipPath -Headers @{ 'User-Agent' = $script:UserAgent }
         if ((Get-Item -LiteralPath $zipPath).Length -ne $size) { throw '下载大小与发布信息不一致。' }
-        if ($expected) {
-            $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -cne $expected) { throw 'SHA-256 校验失败。' }
-            Write-Host 'SHA-256 校验通过。'
-        }
+        $actual = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -cne $expected) { throw 'SHA-256 校验失败，已中止。请重试安装。' }
+        Write-Host 'SHA-256 校验通过。'
 
         $extractDir = Join-Path $work 'pkg'
         Write-Host '正在解压...'
@@ -338,63 +467,26 @@ function Invoke-Install {
         if (!$exe) { throw '安装包缺少 grok-zh.exe' }
         $rg = Find-PackageFile $extractDir 'rg.exe'
 
-        if (Test-Path -LiteralPath $Dir) {
-            $existing = Read-Marker $Dir
-            if (!$existing) { throw "目标目录已存在且不是本安装器部署的：$Dir" }
-        } else {
-            New-Item -ItemType Directory -Path $Dir | Out-Null
+        $payload = Join-Path $work 'payload'
+        Write-InstallPayload -Dest $payload -ExeItem $exe -RgItem $rg -Version $version -WithCompat $WithCompat
+
+        $payloadExe = Join-Path $payload 'grok-zh.exe'
+        $verOut = & $payloadExe --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw '新程序无法运行，已中止，旧版未改动。若弹出 SmartScreen，请选择「仍要运行」后重试。'
         }
+        Write-Host ([string]$verOut).Trim()
 
         Write-Host "正在写入 $Dir"
-        Copy-Item -LiteralPath $exe.FullName -Destination (Join-Path $Dir 'grok-zh.exe') -Force
-        if ($rg) {
-            Copy-Item -LiteralPath $rg.FullName -Destination (Join-Path $Dir 'rg.exe') -Force
-        }
-        Write-CmdShim (Join-Path $Dir 'agent-zh.cmd') 'grok-zh.exe' 'agent'
-
-        $localUninstallPs1 = @"
-`$ErrorActionPreference = 'Stop'
-`$dir = Split-Path -Parent `$MyInvocation.MyCommand.Path
-`$marker = Join-Path `$dir 'install-record.json'
-if (!(Test-Path -LiteralPath `$marker)) { throw "缺少安装记录，拒绝卸载：`$dir" }
-`$current = [Environment]::GetEnvironmentVariable('Path', 'User')
-if (`$current) {
-    `$keep = @(`$current.Split(';') | Where-Object { `$_ -and (`$_.TrimEnd('\','/') -ne `$dir.TrimEnd('\','/')) })
-    [Environment]::SetEnvironmentVariable('Path', (`$keep -join ';'), 'User')
-}
-Remove-Item -LiteralPath `$dir -Recurse -Force
-Write-Host '已卸载 grok-zh。数据目录 %USERPROFILE%\.grok 已保留。'
-"@
-        [IO.File]::WriteAllText((Join-Path $Dir 'uninstall.ps1'), $localUninstallPs1, [Text.UTF8Encoding]::new($false))
-        [IO.File]::WriteAllText(
-            (Join-Path $Dir 'uninstall.cmd'),
-            "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0uninstall.ps1`"`r`n",
-            [Text.UTF8Encoding]::new($false)
-        )
-
-        $commands = @('grok-zh', 'agent-zh')
-        if ($WithCompat) {
-            Write-CmdShim (Join-Path $Dir 'grok.cmd') 'grok-zh.exe'
-            Write-CmdShim (Join-Path $Dir 'agent.cmd') 'grok-zh.exe' 'agent'
-            $commands += @('grok', 'agent')
-        }
-
-        Save-Marker -Dir $Dir -Version $version -Commands $commands
-        if (!$NoPath) { Add-UserPath $Dir }
-
-        $verOut = & (Join-Path $Dir 'grok-zh.exe') --version 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host '已复制程序，但 --version 未能运行。Windows 可能拦截了未签名程序。' -ForegroundColor Yellow
-        } elseif ($verOut) {
-            Write-Host ([string]$verOut.Trim())
+        Switch-AtomicInstall -Payload $payload -Dir $Dir
+        if (!$NoPath) {
+            Add-UserPath $Dir
+            Enter-SessionPath $Dir
         }
 
         Write-Host ''
         Write-Host "安装完成：$version" -ForegroundColor Green
-        Write-Host "位置：$Dir"
-        Write-Host '请重新打开终端后运行：  grok-zh'
-        if ($WithCompat) { Write-Host '兼容入口已启用：  grok' }
-        Write-Host "仓库：https://github.com/$script:Repo"
+        Show-InstallReady -Dir $Dir -NoPath $NoPath -WithCompat $WithCompat
     } finally {
         if (Test-Path -LiteralPath $work) {
             Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
@@ -408,7 +500,7 @@ function Main {
         Show-Help
         return
     }
-    $dir = Get-DefaultInstallDir
+    $dir = Resolve-InstallDir
     $uninstall = (Get-Flag @('-Uninstall', '--uninstall')) -or ($env:GROK_ZH_UNINSTALL -eq '1')
     if ($uninstall) {
         Invoke-Uninstall $dir

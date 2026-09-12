@@ -30,11 +30,7 @@ irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 |
 curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
 ```
 
-然后重新打开终端：
-
-```bash
-grok-zh
-```
+装完后当前窗口即可运行 `grok-zh --version`。若提示找不到命令，再开一个新终端。
 
 ## 卸载
 
@@ -72,10 +68,11 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 ## 脚本会做什么
 
 1. 从 **本仓库** GitHub Release 下载对应系统的安装包
-2. SHA-256 校验
-3. 写入 `grok-zh`、`agent-zh`
-4. 加入 PATH
-5. 留下安装记录，方便以后卸载或更新
+2. 必须通过 SHA-256 校验，否则中止
+3. 先在临时目录验证 `grok-zh --version`，再替换旧文件；失败则保留旧版
+4. 若发现旧版在 `...\grok-zh\bin` 或 `~/.grok/bin`，自动装到该目录，避免两套并存
+5. 写入 `grok-zh`、`agent-zh`，加入 PATH
+6. 留下安装记录，方便以后卸载或更新
 
 再执行一次安装命令：版本相同会跳过下载；有新版本才会更新。同版本重装请加 `-Force` / `--force`。
 
@@ -98,7 +95,10 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 默认不会。官方继续用 `grok`，中文版用 `grok-zh`。
 
 **Windows 弹出 SmartScreen？**  
-构建未做 Authenticode 签名。请只从本仓库安装。
+构建未做 Authenticode 签名。请只从本仓库安装；若弹出拦截，选择「仍要运行」。
+
+**以前装过社区版怎么办？**  
+安装器会检测 `%LOCALAPPDATA%\Programs\grok-zh\bin` 或 `~/.grok/bin`，并更新那一套，不会再装一份。
 
 ## 许可证
 

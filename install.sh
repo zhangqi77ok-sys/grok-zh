@@ -46,7 +46,8 @@ NO_PATH=0
 UNINSTALL=0
 FORCE=0
 REQUESTED_VERSION=${GROK_ZH_VERSION-}
-INSTALL_DIR=${GROK_ZH_INSTALL_DIR:-$DEFAULT_BIN_DIR}
+INSTALL_DIR=
+INSTALL_DIR_EXPLICIT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -62,6 +63,7 @@ while [ $# -gt 0 ]; do
     --install-dir)
       [ $# -ge 2 ] || die '--install-dir 需要目录'
       INSTALL_DIR=$2
+      INSTALL_DIR_EXPLICIT=1
       shift
       ;;
     -h|--help) usage; exit 0 ;;
@@ -69,6 +71,15 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if [ -z "$INSTALL_DIR" ]; then
+  if [ -n "${GROK_ZH_INSTALL_DIR-}" ]; then
+    INSTALL_DIR=$GROK_ZH_INSTALL_DIR
+    INSTALL_DIR_EXPLICIT=1
+  else
+    INSTALL_DIR=$DEFAULT_BIN_DIR
+  fi
+fi
 
 [ "${GROK_ZH_WITH_COMPAT-}" = 1 ] && WITH_COMPAT=1
 [ "${GROK_ZH_NO_PATH-}" = 1 ] && NO_PATH=1
@@ -95,6 +106,37 @@ case "$os:$arch" in
   Darwin:x86_64) die '暂不提供 Intel Mac 包。请使用 Apple Silicon。' ;;
   *) die "不支持当前系统（$os $arch）。支持 Windows x64、Linux x86_64、macOS Apple Silicon。" ;;
 esac
+
+resolve_install_dir() {
+  if [ -f "$INSTALL_DIR/grok-zh" ] || [ -f "$(marker_path)" ]; then
+    return 0
+  fi
+  if [ -f "$INSTALL_DIR/bin/grok-zh" ]; then
+    printf '%s\n' "检测到旧版安装：$INSTALL_DIR/bin"
+    printf '%s\n' '将安装到该目录，避免出现两套 grok-zh。'
+    INSTALL_DIR="$INSTALL_DIR/bin"
+    return 0
+  fi
+  if [ "$INSTALL_DIR_EXPLICIT" -eq 0 ] && [ -f "${HOME}/.grok/bin/grok-zh" ]; then
+    printf '%s\n' "检测到旧版安装：${HOME}/.grok/bin"
+    printf '%s\n' '将安装到该目录，避免出现两套 grok-zh。'
+    INSTALL_DIR="${HOME}/.grok/bin"
+  fi
+}
+
+show_ready() {
+  printf '%s\n' "位置：$INSTALL_DIR"
+  if [ "$NO_PATH" -eq 1 ]; then
+    printf '%s\n' "未修改 PATH。直接运行：$INSTALL_DIR/grok-zh"
+  else
+    printf '%s\n' '当前窗口可运行：  grok-zh --version'
+    printf '%s\n' '若提示找不到命令，请新开一个终端。'
+  fi
+  if [ "$WITH_COMPAT" -eq 1 ]; then
+    printf '%s\n' '兼容入口已启用：  grok'
+  fi
+  printf '%s\n' "仓库：https://github.com/${REPO}"
+}
 
 marker_path() {
   printf '%s\n' "${INSTALL_DIR}/${MARKER_NAME}"
@@ -133,6 +175,8 @@ add_path_line() {
   } >> "$rc_file"
   printf '%s\n' "已写入 PATH 到 $rc_file"
 }
+
+resolve_install_dir
 
 if [ "$UNINSTALL" -eq 1 ]; then
   do_uninstall
@@ -176,8 +220,7 @@ if [ "$FORCE" -eq 0 ] && [ -n "$installed_version" ] && [ "$installed_version" =
     add_path_line "$INSTALL_DIR"
     export PATH="${INSTALL_DIR}:$PATH"
   fi
-  printf '%s\n' "位置：$INSTALL_DIR"
-  printf '%s\n' '运行：  grok-zh'
+  show_ready
   exit 0
 fi
 if [ -n "$installed_version" ] && [ "$installed_version" != "$version" ]; then
@@ -199,12 +242,13 @@ archive_size=$(wc -c < "$work/$archive" | tr -d ' ')
 [ "$archive_size" -gt 0 ] || die '下载的安装包为空。'
 [ "$archive_size" -le "$MAX_BYTES" ] || die '安装包超过大小限制。'
 
-if curl -fsSL -A "$USER_AGENT" -o "$work/$archive.sha256" "${url}.sha256" 2>/dev/null; then
-  expected=$(awk '{ print $1; exit }' "$work/$archive.sha256")
-  actual=$($SHA_CMD "$work/$archive" | awk '{ print $1 }')
-  [ "$expected" = "$actual" ] || die 'SHA-256 校验失败。'
-  printf '%s\n' 'SHA-256 校验通过。'
-fi
+curl -fL --retry 3 -A "$USER_AGENT" -o "$work/$archive.sha256" "${url}.sha256" || \
+  die '无法下载 SHA-256，已中止。请重试安装。'
+expected=$(awk '{ print $1; exit }' "$work/$archive.sha256")
+printf '%s\n' "$expected" | grep -Eq '^[0-9a-fA-F]{64}$' || die 'SHA-256 清单格式无效，已中止。'
+actual=$($SHA_CMD "$work/$archive" | awk '{ print $1 }')
+[ "$expected" = "$actual" ] || die 'SHA-256 校验失败，已中止。请重试安装。'
+printf '%s\n' 'SHA-256 校验通过。'
 
 mkdir "$work/pkg"
 tar -xzf "$work/$archive" -C "$work/pkg"
@@ -220,7 +264,17 @@ if [ -e "$INSTALL_DIR/grok-zh" ] && [ ! -f "$(marker_path)" ]; then
   die "目标已有 grok-zh，但不是本安装器部署的：$INSTALL_DIR/grok-zh"
 fi
 
-cp "$binary" "$INSTALL_DIR/grok-zh"
+tmpbin=$(mktemp "$INSTALL_DIR/.grok-zh.new.XXXXXX") || die '无法创建临时程序文件。'
+if ! cp "$binary" "$tmpbin"; then
+  rm -f "$tmpbin"
+  die '无法写入临时程序文件，旧版未改动。'
+fi
+chmod 755 "$tmpbin"
+if ! "$tmpbin" --version >/dev/null 2>&1; then
+  rm -f "$tmpbin"
+  die '新程序无法运行，已中止，旧版未改动。'
+fi
+mv -f "$tmpbin" "$INSTALL_DIR/grok-zh"
 chmod 755 "$INSTALL_DIR/grok-zh"
 ln -sf grok-zh "$INSTALL_DIR/agent-zh"
 if [ "$WITH_COMPAT" -eq 1 ]; then
@@ -235,9 +289,4 @@ if [ "$NO_PATH" -eq 0 ]; then
 fi
 
 printf '\n%s\n' "安装完成：$version"
-printf '%s\n' "位置：$INSTALL_DIR"
-printf '%s\n' '重新打开终端后运行：  grok-zh'
-if [ "$WITH_COMPAT" -eq 1 ]; then
-  printf '%s\n' '兼容入口已启用：  grok'
-fi
-printf '%s\n' "仓库：https://github.com/${REPO}"
+show_ready
