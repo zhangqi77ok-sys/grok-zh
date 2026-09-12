@@ -19,7 +19,7 @@
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 或双击 `install.cmd`。
@@ -27,24 +27,26 @@ irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 |
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh
 ```
 
 装完后当前窗口即可运行 `grok-zh --version`。若提示找不到命令，再开一个新终端。
+
+上面的地址来自最新正式 Release（`releases/latest/download`），不是 `main` 分支。同一份 Release 里有 `installer-sha256.txt`，可用来核对脚本。
 
 ## 卸载
 
 Windows（必须带卸载开关，直接 `irm | iex` 会重新安装）：
 
 ```powershell
-$env:GROK_ZH_UNINSTALL='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+$env:GROK_ZH_UNINSTALL='1'; irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 或运行安装目录里的 `uninstall.cmd`。
 
 ```bash
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --uninstall
+curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh -s -- --uninstall
 ```
 
 卸载不会删除 `~/.grok` 里的聊天和登录状态。
@@ -82,27 +84,27 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 查看是否需要更新（不下载安装包）：
 
 ```powershell
-$env:GROK_ZH_STATUS='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+$env:GROK_ZH_STATUS='1'; irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --status
+curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh -s -- --status
 ```
 
 便携版（不改 PATH，文件夹可拷走）：
 
 ```powershell
-$env:GROK_ZH_PORTABLE='1'; $env:GROK_ZH_PORTABLE_DIR='D:\apps\grok-zh'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+$env:GROK_ZH_PORTABLE='1'; $env:GROK_ZH_PORTABLE_DIR='D:\apps\grok-zh'; irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 指定版本：
 
 ```powershell
-$env:GROK_ZH_VERSION='1.0.16'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+$env:GROK_ZH_VERSION='1.0.16'; irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --version 1.0.16
+curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh -s -- --version 1.0.16
 ```
 
 ## 常见问题
@@ -126,20 +128,22 @@ curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/instal
 ```powershell
 $env:HTTPS_PROXY='http://127.0.0.1:7890'
 $env:GROK_ZH_MIRROR='https://ghfast.top/'
-irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 ```
 
 ```bash
 export https_proxy=http://127.0.0.1:7890
 export GROK_ZH_MIRROR=https://ghfast.top/
-curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh
 ```
 
 `GROK_ZH_MIRROR` 会加在 GitHub 地址前面。请使用你信任的镜像。
 
 ## 发版
 
-推送 `v*` 标签会触发 GitHub Actions：创建 Release，并上传 `install.ps1`、`install.sh` 和 `installer-sha256.txt`。
+推送 `v*` 标签会触发 GitHub Actions：创建 Release，并上传 `install.ps1`、`install.sh` 和 `installer-sha256.txt`。对外安装命令使用：
+
+`https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1`
 
 若二进制与上一版相同，可在 Actions 里手动运行 **Release**，填写 `copy_binaries_from`（例如 `v1.0.16`）。新的平台包也可以事后用 `gh release upload` 补上。
 

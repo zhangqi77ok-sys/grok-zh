@@ -61,12 +61,12 @@ jobs:
 
           Windows:
           \`\`\`powershell
-          irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+          irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
           \`\`\`
 
           macOS / Linux:
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+          curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh
           \`\`\`
           "
           fi

@@ -1,6 +1,6 @@
 ﻿# grok-zh installer — zhangqi77ok-sys/grok-zh
 # Independent Windows installer: download, verify, deploy, PATH, uninstall.
-# irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+# irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -15,11 +15,11 @@ function Show-Help {
 grok-zh 独立安装器（Windows x64）
 
 安装：
-  irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+  irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 卸载：
-  $env:GROK_ZH_UNINSTALL='1'; irm https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.ps1 | iex
+  $env:GROK_ZH_UNINSTALL='1'; irm https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.ps1 | iex
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall
   或运行安装目录中的 uninstall.cmd
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # grok-zh installer — zhangqi77ok-sys/grok-zh
 # Independent macOS/Linux installer: download, verify, deploy, PATH, uninstall.
-# curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh
+# curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh
 set -eu
 
 REPO='zhangqi77ok-sys/grok-zh'
@@ -46,10 +46,10 @@ usage() {
     'grok-zh 独立安装器（Linux x86_64 / macOS Apple Silicon）' \
     '' \
     '安装：' \
-    '  curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh' \
+    '  curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh' \
     '' \
     '卸载：' \
-    '  curl -fsSL https://raw.githubusercontent.com/zhangqi77ok-sys/grok-zh/main/install.sh | sh -s -- --uninstall' \
+    '  curl -fsSL https://github.com/zhangqi77ok-sys/grok-zh/releases/latest/download/install.sh | sh -s -- --uninstall' \
     '' \
     '选项：' \
     '  --uninstall             卸载本安装器部署的 grok-zh' \
